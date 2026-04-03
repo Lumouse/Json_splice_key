@@ -414,33 +414,95 @@ function provideHint(editor) {
         
         // Search with boundary validation to avoid finding values inside larger numbers
         let valueStartInRow = -1;
+        let matchedLengthInRow = 0;
         let searchPos = searchStartInRow;
+        const isComplexValue = Array.isArray(value) || (typeof value === 'object' && value !== null);
         while (searchPos < rowText.length) {
-            let index = rowText.indexOf(searchPattern, searchPos);
-            if (index === -1) break;
-            
-            // Check boundary characters - must be JSON delimiters, not part of larger value
-            const charBefore = index > 0 ? rowText[index - 1] : ' ';
-            const charAfter = index + searchPattern.length < rowText.length 
-                ? rowText[index + searchPattern.length] 
-                : ' ';
-            
-            // Valid boundaries: comma, bracket, brace, or whitespace
-            const validBefore = /[\s,:\[\{]/.test(charBefore);
-            const validAfter = /[\s,:\]\}]/.test(charAfter);
-            
-            if (validBefore && validAfter) {
-                valueStartInRow = index;
-                break;
+            let index = -1;
+
+            if (!isComplexValue) {
+                index = rowText.indexOf(searchPattern, searchPos);
+                if (index === -1)
+                    break;
+
+                // Check boundary characters - must be JSON delimiters, not part of larger value
+                const charBefore = index > 0 ? rowText[index - 1] : ' ';
+                const charAfter = index + searchPattern.length < rowText.length
+                    ? rowText[index + searchPattern.length]
+                    : ' ';
+
+                // Valid boundaries: comma, bracket, brace, or whitespace
+                const validBefore = /[\s,:\[\{]/.test(charBefore);
+                const validAfter = /[\s,:\]\}]/.test(charAfter);
+
+                if (validBefore && validAfter) {
+                    valueStartInRow = index;
+                    matchedLengthInRow = searchPattern.length;
+                    break;
+                }
+
+                searchPos = index + 1; // Try next occurrence
             }
-            
-            searchPos = index + 1;  // Try next occurrence
+            else {
+                // For complex values (arrays/objects) the on-disk formatting may be multi-line
+                // or contain whitespace, so JSON.stringify won't match. Find the next
+                // opening bracket/brace and attempt to extract the candidate value, then
+                // compare parsed structure to the in-memory `value`.
+                for (let k = searchPos; k < rowText.length; k++) {
+                    if (rowText[k] === '[' || rowText[k] === '{') {
+                        index = k;
+                        break;
+                    }
+                }
+                if (index === -1)
+                    break;
+
+                const openChar = rowText[index];
+                const closeChar = openChar === '[' ? ']' : '}';
+                let depth = 0;
+                let endIdx = -1;
+                for (let k = index; k < rowText.length; k++) {
+                    if (rowText[k] === openChar)
+                        depth++;
+                    else if (rowText[k] === closeChar) {
+                        depth--;
+                        if (depth === 0) {
+                            endIdx = k;
+                            break;
+                        }
+                    }
+                }
+                if (endIdx === -1)
+                    break;
+
+                const candidate = rowText.substring(index, endIdx + 1);
+                try {
+                    const parsedCandidate = (0, jsonc_parser_1.parse)(candidate);
+                    if (JSON.stringify(parsedCandidate) === JSON.stringify(value)) {
+                        valueStartInRow = index;
+                        matchedLengthInRow = endIdx - index + 1;
+                        searchPos = endIdx + 1;
+                        break;
+                    }
+                    else {
+                        // Not the right complex value, continue searching after this candidate
+                        searchPos = endIdx + 1;
+                        continue;
+                    }
+                }
+                catch (e) {
+                    // Couldn't parse candidate - skip it
+                    searchPos = endIdx + 1;
+                    continue;
+                }
+            }
         }
         
         if (valueStartInRow === -1) continue;
         
         let valueStart = rowArrayStart + valueStartInRow;
-        searchStartInRow = valueStartInRow + searchPattern.length;
+        // Advance next search start to avoid matching earlier occurrences.
+        searchStartInRow = valueStartInRow + matchedLengthInRow;
         
         // Found start of value, now find the end by parsing the value
         let valueEnd = valueStart;
@@ -500,12 +562,7 @@ function provideHint(editor) {
         try {
             const startPos = doc.positionAt(valueStart);
             const endPos = doc.positionAt(valueEnd + 1);
-            
-            // Skip if crosses lines
-            if (startPos.line !== endPos.line) {
-                continue;
-            }
-            
+
             const range = new vscode.Range(startPos, endPos);
             decorations.push({
                 range: range,
@@ -516,7 +573,8 @@ function provideHint(editor) {
                     }
                 }
             });
-        } catch (e) {
+        }
+        catch (e) {
             continue;
         }
     }
