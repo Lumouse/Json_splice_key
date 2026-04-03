@@ -1,0 +1,61 @@
+{
+  "name": "json-row-hint",
+  "displayName": "JSON Row Header Hint",
+  "description": "Show header string as faint inline hint when clicking JSON array rows whose first item is a header array.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "activationEvents": [
+    "onLanguage:json"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./"
+  },
+  "devDependencies": {
+    "typescript": "^4.0.0",
+    "@types/vscode": "^1.60.0",
+    "vscode-test": "^1.6.0"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "JSON Row Hint",
+      "properties": {
+        "json-row-hint.links": {
+          "type": "object",
+          "description": "Links from source files and columns to target JSON files. Key is source file name, value is object with column names as keys, each mapping to array of { targetFile: string, targetColumn?: string|number }",
+          "patternProperties": {
+            ".*": {
+              "type": "object",
+              "patternProperties": {
+                ".*": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "targetFile": {
+                        "type": "string",
+                        "description": "Path to target JSON file relative to workspace"
+                      },
+                      "targetColumn": {
+                        "type": ["string", "number"],
+                        "description": "Column name or index in target JSON (default: 0)"
+                      }
+                    },
+                    "required": ["targetFile"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.0.0"
+  }
+}

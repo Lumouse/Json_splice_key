@@ -1,0 +1,6 @@
+[
+  ["user_id", "full_name", "email"],
+  [1, "Alice Johnson", "alice@example.com"],
+  [2, "Bob Smith", "bob@example.com"],
+  [4, "David Wilson", "david@example.com"]
+]

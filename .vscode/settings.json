@@ -1,0 +1,10 @@
+{
+  "json-row-hint.links": {
+    "test-source.json": {
+      "id": [
+        { "targetFile": "test-target.json", "targetColumn": "user_id" },
+        { "targetFile": "test-t2.json", "targetColumn": "user_id" }
+      ]
+    }
+  }
+}
