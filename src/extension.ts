@@ -460,7 +460,7 @@ function provideHint(editor: vscode.TextEditor) {
     // Extract only the current row's text for searching
     const rowText = text.substring(rowArrayStart, rowArrayEnd + 1);
 
-    // For each column, find the value using fast text search within row scope only
+    // For each column, find the value using fast text search + boundary validation
     let searchStartInRow = 0;
     for (let colIdx = 0; colIdx < headers.length; colIdx++) {
         const value = currentRow[colIdx];
@@ -476,14 +476,35 @@ function provideHint(editor: vscode.TextEditor) {
             searchPattern = JSON.stringify(value);
         }
         
-        // Search from previous position within row scope
-        const index = rowText.indexOf(searchPattern, searchStartInRow);
-        if (index === -1) {
-            continue;
+        // Search with boundary validation to avoid finding values inside larger numbers
+        let valueStartInRow = -1;
+        let searchPos = searchStartInRow;
+        while (searchPos < rowText.length) {
+            let index = rowText.indexOf(searchPattern, searchPos);
+            if (index === -1) break;
+            
+            // Check boundary characters - must be JSON delimiters, not part of larger value
+            const charBefore = index > 0 ? rowText[index - 1] : ' ';
+            const charAfter = index + searchPattern.length < rowText.length 
+                ? rowText[index + searchPattern.length] 
+                : ' ';
+            
+            // Valid boundaries: comma, bracket, brace, or whitespace
+            const validBefore = /[\s,:\[\{]/.test(charBefore);
+            const validAfter = /[\s,:\]\}]/.test(charAfter);
+            
+            if (validBefore && validAfter) {
+                valueStartInRow = index;
+                break;
+            }
+            
+            searchPos = index + 1;  // Try next occurrence
         }
         
-        let valueStart = rowArrayStart + index;
-        searchStartInRow = index + searchPattern.length;  // Next search starts after this value
+        if (valueStartInRow === -1) continue;
+        
+        let valueStart = rowArrayStart + valueStartInRow;
+        searchStartInRow = valueStartInRow + searchPattern.length;
         
         // Found start of value, now find the end by parsing the value
         let valueEnd = valueStart;
